@@ -7,6 +7,9 @@ authors = ["Benjamin"]
 [tool.poetry.dependencies]
 python = "^3.13"
 pydantic = "^2.11.9"
+mcp = "^1.14.1"
+a2a-sdk = "^0.3.7"
+fastapi = "^0.117.1"
 
 [build-system]
 requires = ["poetry-core"]
