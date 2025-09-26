@@ -70,3 +70,65 @@ To leverage A2A in our arithmetic experiment, we must handle several responsibil
 	•	Handle state transitions: Monitor task states and send additional inputs when required or finalise tasks when complete.  Collect logs and metrics to analyse message counts, latencies, errors, and overall system behaviour.
 
 By integrating these elements, our system aligns with the A2A specification while retaining control over the logic of expression evaluation and performance measurement.
+
+Implementation Overview
+----------------------
+- `agent_system/Agent.py` defines the shared `IAgent` interface, A2A message models, and an `ArithmeticAgent` capable of executing a single operation by calling the MCP calculator.
+- `agent_system/MCP.py` simulates a shared MCP calculator with deterministic `Decimal` arithmetic and exposes helpers to look up operations.
+- `agent_system/worker_app.py` hosts a FastAPI service that publishes the agent card at `/.well-known/agent.json` and serves the `/act` endpoint used for A2A `task/send` requests.
+- `agent_system/orchestrator.py` discovers worker agents via their agent cards, plans expression evaluation using Python's AST, and delegates each arithmetic step to the appropriate worker via HTTP.
+
+Running The Workers
+-------------------
+1. Install dependencies with `poetry install`.
+2. Start one FastAPI worker per arithmetic operation. Each process reads the `OPERATION_TYPE` environment variable at startup:
+
+   ```bash
+   OPERATION_TYPE=add uvicorn agent_system.worker_app:app --host 0.0.0.0 --port 8000
+   OPERATION_TYPE=sub uvicorn agent_system.worker_app:app --host 0.0.0.0 --port 8001
+   OPERATION_TYPE=mul uvicorn agent_system.worker_app:app --host 0.0.0.0 --port 8002
+   OPERATION_TYPE=div uvicorn agent_system.worker_app:app --host 0.0.0.0 --port 8003
+   ```
+
+   Each worker advertises its supported intents in `/.well-known/agent.json`, which the orchestrator reads during discovery.
+
+Running The Orchestrator
+------------------------
+- Launch the orchestrator with the URLs of the running workers. It will fetch each agent card, map intents to `/act`, and then plan the evaluation of the requested expression:
+
+  ```bash
+  python -m agent_system.orchestrator "2 + 3 * 4" \
+    --agent http://localhost:8000 \
+    --agent http://localhost:8001 \
+    --agent http://localhost:8002 \
+    --agent http://localhost:8003
+  ```
+
+  The orchestrator logs its plan internally (see `ArithmeticOrchestrator.execution_log`) so you can inspect which remote agent handled each intermediate result.
+
+Containerisation
+----------------
+- Use the same image for every worker and select the operation via `OPERATION_TYPE`. A minimal `Dockerfile` might look like this:
+
+  ```dockerfile
+  FROM python:3.13-slim
+  WORKDIR /app
+  COPY pyproject.toml poetry.lock ./
+  RUN pip install       "poetry"       && poetry config virtualenvs.create false       && poetry install --no-root --only main
+  COPY agent_system ./agent_system
+  COPY README.md ./README.md
+  ENV OPERATION_TYPE=add
+  EXPOSE 8000
+  CMD ["uvicorn", "agent_system.worker_app:app", "--host", "0.0.0.0", "--port", "8000"]
+  ```
+
+- Build the image once (`docker build -t arithmetic-agent .`) and run a container for each operation, overriding `OPERATION_TYPE` and the port as needed:
+
+  ```bash
+  docker run -e OPERATION_TYPE=add -p 8000:8000 arithmetic-agent
+  docker run -e OPERATION_TYPE=sub -p 8001:8000 arithmetic-agent
+  docker run -e OPERATION_TYPE=mul -p 8002:8000 arithmetic-agent
+  docker run -e OPERATION_TYPE=div -p 8003:8000 arithmetic-agent
+  ```
+
+- Run the orchestrator in a separate container or on the host. It only needs HTTP access to the worker containers.
