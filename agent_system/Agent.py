@@ -113,7 +113,10 @@ class LangGraphReactAgent(AgentInterface):
             raise RuntimeError("Agent graph is not initialized")
 
         payload = self._build_input_messages(task)
-        result = await self._graph.ainvoke({"messages": payload})
+        try:
+            result = await self._graph.ainvoke({"messages": payload})
+        except Exception as exc:
+            raise RuntimeError(f"LangGraph execution failed for payload {payload}") from exc
         messages = result.get("messages", [])
         self._last_messages = messages
         self._trace = self._build_trace(messages)
