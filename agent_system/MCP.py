@@ -27,14 +27,14 @@ def _ensure_operands(operands: Iterable[Decimal]) -> list[Decimal]:
     return values
 
 
-@mcp.tool(name="add", description="Add a sequence of decimal operands deterministically.")
+@mcp.tool(name="add", description="Does addition")
 def add(operands: list[Decimal]) -> str:
     values = _ensure_operands(operands)
     total = sum(values, Decimal(0))
     return str(total)
 
 
-@mcp.tool(name="sub", description="Subtract subsequent decimal operands from the first operand.")
+@mcp.tool(name="sub", description="Does subtraction")
 def subtract(operands: list[Decimal]) -> str:
     values = _ensure_operands(operands)
     total = values[0]
@@ -43,7 +43,7 @@ def subtract(operands: list[Decimal]) -> str:
     return str(total)
 
 
-@mcp.tool(name="mul", description="Multiply all provided decimal operands deterministically.")
+@mcp.tool(name="mul", description="Does multiplication")
 def multiply(operands: list[Decimal]) -> str:
     values = _ensure_operands(operands)
     product = values[0]
