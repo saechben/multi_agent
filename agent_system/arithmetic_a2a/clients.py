@@ -81,13 +81,14 @@ class _A2AArithmeticClient:
             raise RuntimeError("Agent response did not include a message")
 
         text = self._message_to_text(message)
-        match = re.search(r"[-+]?\d+(?:\.\d+)?", text)
-        if not match:
+        matches = re.findall(r"[-+]?\d+(?:\.\d+)?", text)
+        if not matches:
             raise RuntimeError(f"Unable to parse numeric result from '{text}'")
         try:
-            return Decimal(match.group(0))
+            return Decimal(matches[-1])
         except InvalidOperation as exc:  # pragma: no cover
-            raise RuntimeError(f"Invalid numeric result: {match.group(0)}") from exc
+            value = matches[-1]
+            raise RuntimeError(f"Invalid numeric result: {value}") from exc
 
     @staticmethod
     def _message_to_text(message: Message) -> str:
@@ -101,13 +102,19 @@ class _A2AArithmeticClient:
 
 class AdditionClient(_A2AArithmeticClient):
     async def add(self, lhs: Decimal, rhs: Decimal) -> Decimal:
-        prompt = f"Add {format_decimal(lhs)} and {format_decimal(rhs)}"
+        prompt = (
+            f"Add {format_decimal(lhs)} and {format_decimal(rhs)}. "
+            "Respond with only the numeric sum."
+        )
         return await self.send_prompt(prompt)
 
 
 class SubtractionClient(_A2AArithmeticClient):
     async def subtract(self, lhs: Decimal, rhs: Decimal) -> Decimal:
-        prompt = f"Subtract {format_decimal(rhs)} from {format_decimal(lhs)}"
+        prompt = (
+            f"Subtract {format_decimal(rhs)} from {format_decimal(lhs)}. "
+            "Respond with only the numeric difference."
+        )
         return await self.send_prompt(prompt)
 
 
