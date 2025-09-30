@@ -7,6 +7,7 @@ import uuid
 from decimal import Decimal, InvalidOperation
 
 import httpx
+from httpx import Timeout
 from a2a.client import A2ACardResolver, A2AClient
 from a2a.types import (
     JSONRPCErrorResponse,
@@ -50,7 +51,10 @@ class _A2AArithmeticClient:
             id=str(uuid.uuid4()),
             params=MessageSendParams(message=message),
         )
-        response = await self._client.send_message(request,http_kwargs={"timeout": 300})
+        response = await self._client.send_message(
+            request,
+            http_kwargs={"timeout": Timeout(None)},
+        )
         payload = response.root
         if isinstance(payload, JSONRPCErrorResponse):
             raise RuntimeError(f"Remote agent error: {payload.error.message}")
