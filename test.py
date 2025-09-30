@@ -1,31 +1,21 @@
-"""Integration test that spins up MCP + A2A arithmetic agents and evaluates an expression."""
+"""Integration test that spins up arithmetic agents and measures their latency directly."""
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
+import time
+from decimal import Decimal
 from typing import Iterable
 
-import httpx
 import uvicorn
 from dotenv import load_dotenv
 
-from a2a.client import A2ACardResolver, A2AClient
-from a2a.types import (
-    JSONRPCErrorResponse,
-    Message,
-    MessageSendParams,
-    Part,
-    Role,
-    SendMessageRequest,
-    SendMessageSuccessResponse,
-    Task,
-    TextPart,
-)
-
 from agent_system.MCP import mcp
+from agent_system.arithmetic_a2a.clients import AdditionClient, SubtractionClient
+from agent_system.arithmetic_a2a.remote_executors import format_decimal
 from agent_system.a2a_server_addition import build_application as build_addition_app
-from agent_system.a2a_server_host import build_application as build_host_app
 from agent_system.a2a_server_subtraction import build_application as build_subtraction_app
 
 
@@ -33,15 +23,30 @@ async def start_uvicorn(app, host: str, port: int) -> tuple[uvicorn.Server, asyn
     config = uvicorn.Config(app, host=host, port=port, log_level="error")
     server = uvicorn.Server(config)
     task = asyncio.create_task(server.serve())
-    # Wait until the server reports it has started
     while not server.started:  # type: ignore[attr-defined]
         await asyncio.sleep(0.05)
     return server, task
 
 
-async def stop_uvicorn(server: uvicorn.Server, task: asyncio.Task[None]) -> None:
+async def stop_uvicorn(server: uvicorn.Server, task: asyncio.Task[None], *, timeout: float = 5.0) -> None:
+    """Request shutdown and ensure the server task terminates promptly."""
+
     server.should_exit = True
-    await task
+    pending_exc: Exception | None = None
+    try:
+        await asyncio.wait_for(task, timeout=timeout)
+        return
+    except asyncio.TimeoutError:
+        server.force_exit = True
+    except Exception as exc:  # pragma: no cover - defensive path
+        server.force_exit = True
+        pending_exc = exc
+
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    if pending_exc is not None:
+        raise pending_exc
 
 
 def ensure_env(var: str) -> str:
@@ -51,17 +56,35 @@ def ensure_env(var: str) -> str:
     return value
 
 
-def _message_to_text(message: Message) -> str:
-    texts: list[str] = []
-    for part in message.parts:
-        root = part.root
-        if isinstance(root, TextPart):
-            texts.append(root.text)
-    return "\n".join(texts)
+async def call_arithmetic_agents(initial_value: Decimal, steps: Iterable[tuple[str, Decimal]]) -> Decimal:
+    """Mimic the host agent by delegating to the remote addition/subtraction agents only."""
+
+    addition_client = AdditionClient(os.environ["ADDITION_AGENT_URL"])
+    subtraction_client = SubtractionClient(os.environ["SUBTRACTION_AGENT_URL"])
+    try:
+        current = initial_value
+        for idx, (operation, operand) in enumerate(steps, start=1):
+            operator_symbol = "+" if operation == "add" else "-"
+            start = time.perf_counter()
+            if operation == "add":
+                next_value = await addition_client.add(current, operand)
+            elif operation == "sub":
+                next_value = await subtraction_client.subtract(current, operand)
+            else:
+                raise ValueError(f"Unsupported operation '{operation}'")
+            elapsed_ms = (time.perf_counter() - start) * 1_000
+            print(
+                f"Direct step {idx}: {format_decimal(current)} {operator_symbol} "
+                f"{format_decimal(operand)} = {format_decimal(next_value)} ({elapsed_ms:.1f} ms)"
+            )
+            current = next_value
+        return current
+    finally:
+        await addition_client.shutdown()
+        await subtraction_client.shutdown()
 
 
 async def run_integration() -> None:
-    # Make environment variables from .env available
     load_dotenv()
     ensure_env("LLM_API_KEY")
 
@@ -69,64 +92,33 @@ async def run_integration() -> None:
     mcp_port = 18200
     addition_port = 18201
     subtraction_port = 18202
-    host_port = 18203
 
     os.environ["MCP_SERVER_URL"] = f"http://{host}:{mcp_port}/mcp"
-    os.environ["A2A_PUBLIC_URL"] = f"http://{host}:{addition_port}"
     os.environ["ADDITION_AGENT_URL"] = f"http://{host}:{addition_port}"
     os.environ["SUBTRACTION_AGENT_URL"] = f"http://{host}:{subtraction_port}"
-    os.environ["A2A_HOST_PUBLIC_URL"] = f"http://{host}:{host_port}"
 
     mcp_app = mcp.streamable_http_app()
+    os.environ["A2A_PUBLIC_URL"] = f"http://{host}:{addition_port}"
     addition_app = build_addition_app().build()
+    os.environ["A2A_PUBLIC_URL"] = f"http://{host}:{subtraction_port}"
     subtraction_app = build_subtraction_app().build()
-    host_app = build_host_app().build()
 
     servers: list[tuple[uvicorn.Server, asyncio.Task[None]]] = []
     try:
         servers.append(await start_uvicorn(mcp_app, host, mcp_port))
         servers.append(await start_uvicorn(addition_app, host, addition_port))
         servers.append(await start_uvicorn(subtraction_app, host, subtraction_port))
-        servers.append(await start_uvicorn(host_app, host, host_port))
 
-        async with httpx.AsyncClient() as http_client:
-            resolver = A2ACardResolver(httpx_client=http_client, base_url=f"http://{host}:{host_port}")
-            card = await resolver.get_agent_card()
-            client = A2AClient(httpx_client=http_client, agent_card=card)
-
-            message = Message(
-                role=Role.user,
-                messageId="test",
-                parts=[Part(root=TextPart(text="Compute 10 - 3 + 2"))],
-            )
-            request = SendMessageRequest(
-                id="request-1",
-                params=MessageSendParams(message=message),
-            )
-            try:
-                response = await client.send_message(request, http_kwargs={"timeout": 300})
-            except Exception as exc:
-                raise RuntimeError(f"A2A host request failed: {exc}") from exc
-
-            payload = response.root
-            if isinstance(payload, JSONRPCErrorResponse):
-                raise RuntimeError(f"Host agent returned error: {payload.error.message}")
-
-            assert isinstance(payload, SendMessageSuccessResponse)
-            result = payload.result
-            final_text: str
-            if isinstance(result, Task):
-                history: Iterable[Message] = result.history or []
-                agent_messages = [msg for msg in history if msg.role == Role.agent]
-                if not agent_messages:
-                    raise RuntimeError("Host agent did not emit any messages")
-                final_text = _message_to_text(agent_messages[-1])
-            else:
-                final_text = _message_to_text(result)
-
-            print("Host agent final reply:\n", final_text)
-            assert "9" in final_text
-
+        steps: list[tuple[str, Decimal]] = [
+            ("sub", Decimal("3")),
+            ("add", Decimal("2")),
+        ]
+        total_start = time.perf_counter()
+        direct_result = await call_arithmetic_agents(Decimal("10"), steps)
+        total_elapsed_ms = (time.perf_counter() - total_start) * 1_000
+        print("Direct arithmetic agents final result:\n", format_decimal(direct_result))
+        print(f"Total arithmetic latency: {total_elapsed_ms:.1f} ms")
+        assert direct_result == Decimal("9")
     finally:
         for server, task in reversed(servers):
             await stop_uvicorn(server, task)
