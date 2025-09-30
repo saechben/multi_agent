@@ -230,7 +230,7 @@ class LangGraphReactAgent(AgentInterface):
 
         for message in messages:
             if isinstance(message, AIMessage):
-                thought = self._message_to_text(message)
+                thought = self._coerce_text(message.content)
                 if message.tool_calls:
                     for tool_call in message.tool_calls:
                         step = ReactionStep(
@@ -242,42 +242,34 @@ class LangGraphReactAgent(AgentInterface):
                         if call_id:
                             steps_by_call_id[call_id] = step
                         trace.append(step)
-                elif trace:
-                    if trace[-1].observation is None:
-                        trace[-1].observation = thought
+                elif trace and trace[-1].observation is None:
+                    trace[-1].observation = thought
             elif isinstance(message, ToolMessage):
                 step = steps_by_call_id.get(message.tool_call_id)
                 if step is not None:
-                    step.observation = self._content_to_text(message.content)
+                    step.observation = self._coerce_text(message.content)
 
         return trace
 
     def _extract_final_answer(self, messages: Sequence[BaseMessage]) -> str:
         for message in reversed(messages):
             if isinstance(message, AIMessage) and not message.tool_calls:
-                return self._message_to_text(message)
+                return self._coerce_text(message.content)
         if messages:
-            return self._content_to_text(messages[-1].content)
+            return self._coerce_text(messages[-1].content)
         raise RuntimeError("Agent did not return any messages")
 
-    def _message_to_text(self, message: AIMessage) -> str:
-        return self._content_to_text(message.content)
-
-    def _content_to_text(self, content: Any) -> str:
+    def _coerce_text(self, content: Any) -> str:
         if isinstance(content, str):
             return content
-        if isinstance(content, list):
-            parts: list[str] = []
-            for chunk in content:
-                if isinstance(chunk, str):
-                    parts.append(chunk)
-                elif isinstance(chunk, dict):
-                    value = chunk.get("text") or chunk.get("content")
-                    if value is not None:
-                        parts.append(str(value))
-                else:
-                    parts.append(str(chunk))
-            return "\n".join(parts)
+        if isinstance(content, list) and content:
+            first = content[0]
+            if isinstance(first, str):
+                return first
+            if isinstance(first, dict):
+                value = first.get("text") or first.get("content")
+                if value is not None:
+                    return str(value)
         return str(content)
 
 
