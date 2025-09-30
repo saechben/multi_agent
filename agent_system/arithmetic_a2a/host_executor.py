@@ -69,12 +69,11 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
 
         current = plan.initial_value
         for idx, step in enumerate(plan.steps, start=1):
+            operator = "+" if step.operation == "add" else "-"
             if step.operation == "add":
                 result = await self.addition_client.add(current, step.operand)  # type: ignore[arg-type]
-                operator = "+"
             else:
                 result = await self.subtraction_client.subtract(current, step.operand)  # type: ignore[arg-type]
-                operator = "-"
 
             await event_queue.enqueue_event(
                 new_agent_text_message(
@@ -83,7 +82,7 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
             )
             current = result
 
-        await event_queue.enqueue_event(new_agent_text_message(f"Final result: {format_decimal(current)}"))
+        await event_queue.enqueue_event(new_agent_text_message(format_decimal(current)))
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         await event_queue.enqueue_event(new_agent_text_message("Cancellation is not supported."))
