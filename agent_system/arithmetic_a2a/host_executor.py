@@ -12,6 +12,7 @@ from a2a.server.agent_execution import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.utils import new_agent_text_message
+from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
@@ -57,7 +58,26 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
             )
             return
 
-        await event_queue.enqueue_event(new_agent_text_message(f"Planning expression: {expression}"))
+        task_id = context.task_id or (context.current_task.id if context.current_task else None)
+        context_id = context.context_id or (context.current_task.context_id if context.current_task else None)
+
+        async def send_status(text: str, *, state: TaskState = TaskState.working, final: bool = False) -> None:
+            if not task_id or not context_id:
+                await event_queue.enqueue_event(new_agent_text_message(text))
+                return
+            message = new_agent_text_message(text)
+            message.task_id = task_id
+            message.context_id = context_id
+            status = TaskStatus(state=state, message=message)
+            event = TaskStatusUpdateEvent(
+                taskId=task_id,
+                contextId=context_id,
+                status=status,
+                final=final,
+            )
+            await event_queue.enqueue_event(event)
+
+        await send_status(f"Planning expression: {expression}")
 
         try:
             plan = await self._decompose_with_llm(expression)
@@ -67,6 +87,17 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
             )
             return
 
+        plan_lines = [
+            "Plan:",
+            f"  start = {format_decimal(plan.initial_value)}",
+        ]
+        for idx, step in enumerate(plan.steps, start=1):
+            operator = "+" if step.operation == "add" else "-"
+            plan_lines.append(
+                f"  {idx}. {operator} {format_decimal(step.operand)}",
+            )
+        await send_status("\n".join(plan_lines))
+
         current = plan.initial_value
         for idx, step in enumerate(plan.steps, start=1):
             operator = "+" if step.operation == "add" else "-"
@@ -75,14 +106,16 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
             else:
                 result = await self.subtraction_client.subtract(current, step.operand)  # type: ignore[arg-type]
 
-            await event_queue.enqueue_event(
-                new_agent_text_message(
-                    f"Step {idx}: {format_decimal(current)} {operator} {format_decimal(step.operand)} = {format_decimal(result)}"
-                )
+            await send_status(
+                f"Step {idx}: {format_decimal(current)} {operator} {format_decimal(step.operand)} = {format_decimal(result)}"
             )
             current = result
 
-        await event_queue.enqueue_event(new_agent_text_message(format_decimal(current)))
+        await send_status(
+            format_decimal(current),
+            state=TaskState.completed,
+            final=True,
+        )
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         await event_queue.enqueue_event(new_agent_text_message("Cancellation is not supported."))
