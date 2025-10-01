@@ -18,10 +18,10 @@ load_dotenv()
 import uvicorn
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentSkill
 
 from agent_system.arithmetic_a2a import ArithmeticHostAgentExecutor
+from agent_system.logging_task_store import FileTaskStore
 
 
 def build_application() -> A2AStarletteApplication:
@@ -46,7 +46,7 @@ def build_application() -> A2AStarletteApplication:
 
     request_handler = DefaultRequestHandler(
         agent_executor=ArithmeticHostAgentExecutor(),
-        task_store=InMemoryTaskStore(),
+        task_store=FileTaskStore(),
     )
 
     return A2AStarletteApplication(http_handler=request_handler, agent_card=agent_card)
