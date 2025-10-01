@@ -124,5 +124,21 @@ async def run_integration() -> None:
             await stop_uvicorn(server, task)
 
 
+def debug_experiment(expression: str) -> None:
+    """Helper for VS Code debugger to execute an experiment run."""
+
+    from experiment import run
+
+    outcome = run(expression)
+    print("Expression:", outcome.expression)
+    print("Final value:", outcome.final_value)
+    print("Agent messages:")
+    for line in outcome.messages:
+        print("-", line)
+    if outcome.task_id:
+        print("Task ID:", outcome.task_id)
+
 if __name__ == "__main__":
-    asyncio.run(run_integration())
+    debug_experiment("10+5-3+6")
+
+
