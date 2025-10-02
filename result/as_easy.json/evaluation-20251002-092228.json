@@ -1,0 +1,8 @@
+{
+  "timestamp": "2025-10-02T09:22:28Z",
+  "dataset": "data/as_easy.json",
+  "total": 100,
+  "correct": 100,
+  "accuracy": 1.0,
+  "mismatches": []
+}
