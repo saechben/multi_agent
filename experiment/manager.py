@@ -15,6 +15,8 @@ from .servers import (
     build_host_app,
     build_mcp_app,
     build_subtraction_app,
+    build_multiplication_app,
+    build_division_app,
     start_uvicorn,
     stop_uvicorn,
 )
@@ -47,16 +49,22 @@ class Experiment:
         mcp_url = f"{base}:{cfg.mcp_port}/mcp"
         addition_url = f"{base}:{cfg.addition_port}"
         subtraction_url = f"{base}:{cfg.subtraction_port}"
+        multiplication_url = f"{base}:{cfg.multiplication_port}"
+        division_url = f"{base}:{cfg.division_port}"
         host_url = f"{base}:{cfg.host_port}"
 
         self._set_env("MCP_SERVER_URL", mcp_url)
         self._set_env("ADDITION_AGENT_URL", addition_url)
         self._set_env("SUBTRACTION_AGENT_URL", subtraction_url)
+        self._set_env("MULTIPLICATION_AGENT_URL", multiplication_url)
+        self._set_env("DIVISION_AGENT_URL", division_url)
         self._set_env("A2A_HOST_PUBLIC_URL", host_url)
 
         mcp_app = build_mcp_app()
         addition_app = build_addition_app(addition_url, cfg.log_root / "addition").build()
         subtraction_app = build_subtraction_app(subtraction_url, cfg.log_root / "subtraction").build()
+        multiplication_app = build_multiplication_app(multiplication_url, cfg.log_root / "multiplication").build()
+        division_app = build_division_app(division_url, cfg.log_root / "division").build()
         host_app = build_host_app(host_url, cfg.log_root / "host").build()
 
         started: list[ServerHandle] = []
@@ -64,6 +72,8 @@ class Experiment:
             started.append(await start_uvicorn(mcp_app, cfg.host, cfg.mcp_port, "mcp"))
             started.append(await start_uvicorn(addition_app, cfg.host, cfg.addition_port, "addition"))
             started.append(await start_uvicorn(subtraction_app, cfg.host, cfg.subtraction_port, "subtraction"))
+            started.append(await start_uvicorn(multiplication_app, cfg.host, cfg.multiplication_port, "multiplication"))
+            started.append(await start_uvicorn(division_app, cfg.host, cfg.division_port, "division"))
             started.append(await start_uvicorn(host_app, cfg.host, cfg.host_port, "host"))
         except Exception:
             for handle in reversed(started):

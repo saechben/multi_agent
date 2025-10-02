@@ -18,6 +18,8 @@ from agent_system.arithmetic_a2a import (
     AdditionAgentExecutor,
     ArithmeticHostAgentExecutor,
     SubtractionAgentExecutor,
+    MultiplicationAgentExecutor,
+    DivisionAgentExecutor,
 )
 from agent_system.logging_task_store import FileTaskStore
 
@@ -114,6 +116,56 @@ def build_subtraction_app(public_url: str, log_dir: Path) -> A2AStarletteApplica
     return A2AStarletteApplication(http_handler=handler, agent_card=agent_card)
 
 
+def build_multiplication_app(public_url: str, log_dir: Path) -> A2AStarletteApplication:
+    skill = AgentSkill(
+        id="multiplication",
+        name="Multiplication",
+        description="Multiplies numbers via the MCP multiplication tool",
+        tags=["math", "multiplication", "product"],
+        examples=["Multiply 6 and 7", "Compute 3 * 5"],
+    )
+    agent_card = AgentCard(
+        name="MCP Multiplication Agent",
+        description="Provides multiplication by delegating to the MCP multiplication tool",
+        url=public_url,
+        defaultInputModes=["text"],
+        defaultOutputModes=["text"],
+        skills=[skill],
+        version="1.0.0",
+        capabilities=AgentCapabilities(),
+    )
+    handler = DefaultRequestHandler(
+        agent_executor=MultiplicationAgentExecutor(),
+        task_store=FileTaskStore(log_dir),
+    )
+    return A2AStarletteApplication(http_handler=handler, agent_card=agent_card)
+
+
+def build_division_app(public_url: str, log_dir: Path) -> A2AStarletteApplication:
+    skill = AgentSkill(
+        id="division",
+        name="Division",
+        description="Divides numbers via the MCP division tool",
+        tags=["math", "division", "quotient"],
+        examples=["Divide 8 by 2", "Compute 9 / 3"],
+    )
+    agent_card = AgentCard(
+        name="MCP Division Agent",
+        description="Provides division by delegating to the MCP division tool",
+        url=public_url,
+        defaultInputModes=["text"],
+        defaultOutputModes=["text"],
+        skills=[skill],
+        version="1.0.0",
+        capabilities=AgentCapabilities(),
+    )
+    handler = DefaultRequestHandler(
+        agent_executor=DivisionAgentExecutor(),
+        task_store=FileTaskStore(log_dir),
+    )
+    return A2AStarletteApplication(http_handler=handler, agent_card=agent_card)
+
+
 def build_host_app(public_url: str, log_dir: Path) -> A2AStarletteApplication:
     skill = AgentSkill(
         id="arithmetic_planning",
@@ -146,5 +198,7 @@ __all__ = [
     "build_mcp_app",
     "build_addition_app",
     "build_subtraction_app",
+    "build_multiplication_app",
+    "build_division_app",
     "build_host_app",
 ]

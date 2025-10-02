@@ -126,6 +126,30 @@ class SubtractionAgentExecutor(MCPToolAgentExecutor):
         super().__init__(tool_name="sub", prompt=self.PROMPT, llm=llm, server_url=server_url)
 
 
+class MultiplicationAgentExecutor(MCPToolAgentExecutor):
+    """Executor that forces the agent to call the MCP multiplication tool."""
+
+    PROMPT = (
+        "You specialise in multiplication. Always call the 'mul' MCP tool to"
+        " compute products and never perform arithmetic yourself."
+    )
+
+    def __init__(self, *, llm: ChatOpenAI | None = None, server_url: str | None = None) -> None:
+        super().__init__(tool_name="mul", prompt=self.PROMPT, llm=llm, server_url=server_url)
+
+
+class DivisionAgentExecutor(MCPToolAgentExecutor):
+    """Executor that forces the agent to call the MCP division tool."""
+
+    PROMPT = (
+        "You specialise in division. Always call the 'div' MCP tool to"
+        " compute quotients and never perform arithmetic yourself."
+    )
+
+    def __init__(self, *, llm: ChatOpenAI | None = None, server_url: str | None = None) -> None:
+        super().__init__(tool_name="div", prompt=self.PROMPT, llm=llm, server_url=server_url)
+
+
 def _format_trace(result: str, trace: tuple[ReactionStep, ...]) -> str:
     if not trace:
         return f"Result: {result}"
@@ -151,5 +175,7 @@ __all__ = [
     "MCPToolAgentExecutor",
     "AdditionAgentExecutor",
     "SubtractionAgentExecutor",
+    "MultiplicationAgentExecutor",
+    "DivisionAgentExecutor",
     "format_decimal",
 ]

@@ -118,4 +118,27 @@ class SubtractionClient(_A2AArithmeticClient):
         return await self.send_prompt(prompt)
 
 
-__all__ = ["AdditionClient", "SubtractionClient"]
+class MultiplicationClient(_A2AArithmeticClient):
+    async def multiply(self, lhs: Decimal, rhs: Decimal) -> Decimal:
+        prompt = (
+            f"Multiply {format_decimal(lhs)} by {format_decimal(rhs)}. "
+            "Respond with only the numeric product."
+        )
+        return await self.send_prompt(prompt)
+
+
+class DivisionClient(_A2AArithmeticClient):
+    async def divide(self, numerator: Decimal, denominator: Decimal) -> Decimal:
+        prompt = (
+            f"Divide {format_decimal(numerator)} by {format_decimal(denominator)}. "
+            "Respond with only the numeric quotient."
+        )
+        return await self.send_prompt(prompt)
+
+
+__all__ = [
+    "AdditionClient",
+    "SubtractionClient",
+    "MultiplicationClient",
+    "DivisionClient",
+]

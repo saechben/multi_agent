@@ -15,7 +15,9 @@ class ExperimentConfig:
     mcp_port: int = 18200
     addition_port: int = 18201
     subtraction_port: int = 18202
-    host_port: int = 18203
+    multiplication_port: int = 18203
+    division_port: int = 18204
+    host_port: int = 18205
     log_root: Path = Path("logs")
     llm_model: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
     llm_api_key: str | None = None
