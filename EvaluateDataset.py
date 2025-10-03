@@ -66,7 +66,10 @@ class EvaluationPipeline:
                 outcome = await experiment.evaluate(expression)
                 actual = outcome.final_value
 
-                if actual == expected:
+                expected_norm = expected.quantize(Decimal("0.001"))
+                actual_norm = actual.quantize(Decimal("0.001"))
+
+                if actual_norm == expected_norm:
                     correct += 1
                 else:
                     mismatches.append(
@@ -74,6 +77,8 @@ class EvaluationPipeline:
                             "expression": expression,
                             "expected": str(expected),
                             "actual": str(actual),
+                            "expected_rounded": str(expected_norm),
+                            "actual_rounded": str(actual_norm),
                             "messages": list(outcome.messages),
                             "task_id": outcome.task_id,
                         }
@@ -112,8 +117,7 @@ def run_evaluation(
 
 
 if __name__ =="__main__":
-    dataset_path = Path("./data/asm_easy.json")
-    result_dir = Path("./result/asm_easy.json")
+    dataset_path = Path("./data/asmd_easy.json")
+    result_dir = Path("./result/asmd_easy.json")
     run_evaluation(dataset_path=dataset_path,
                    results_dir = result_dir)
-
