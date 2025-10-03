@@ -1,0 +1,54 @@
+{
+  "timestamp": "2025-10-03T09:04:46Z",
+  "dataset": "data/asmd_easy.json",
+  "total": 100,
+  "correct": 97,
+  "accuracy": 0.97,
+  "mismatches": [
+    {
+      "expression": "6 - 12 - 86",
+      "expected": "-92",
+      "actual": "-80",
+      "expected_rounded": "-92.000",
+      "actual_rounded": "-80.000",
+      "messages": [
+        "Planning expression: 6 - 12 - 86",
+        "Plan:\n  start = 6\n  1. - 12\n  2. - 86",
+        "Step 1: 6 - 12 = 6",
+        "Step 2: 6 - 86 = -80",
+        "-80"
+      ],
+      "task_id": "c0c13ef9-2415-473e-bb0b-727c8b1e9974"
+    },
+    {
+      "expression": "55 - 100 * 4",
+      "expected": "-180",
+      "actual": "180",
+      "expected_rounded": "-180.000",
+      "actual_rounded": "180.000",
+      "messages": [
+        "Planning expression: 55 - 100 * 4",
+        "Plan:\n  start = 55\n  1. - 100\n  2. * 4",
+        "Step 1: 55 - 100 = 45",
+        "Step 2: 45 * 4 = 180",
+        "180"
+      ],
+      "task_id": "c28ad4ba-b004-40af-8b14-80ddd9f2bc14"
+    },
+    {
+      "expression": "20 + 15 - 60",
+      "expected": "-25",
+      "actual": "25",
+      "expected_rounded": "-25.000",
+      "actual_rounded": "25.000",
+      "messages": [
+        "Planning expression: 20 + 15 - 60",
+        "Plan:\n  start = 20\n  1. + 15\n  2. - 60",
+        "Step 1: 20 + 15 = 35",
+        "Step 2: 35 - 60 = 25",
+        "25"
+      ],
+      "task_id": "df1322ad-6818-4fb7-9609-3e28e673154c"
+    }
+  ]
+}
