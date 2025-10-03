@@ -16,12 +16,12 @@ from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field, ValidationError
 
-from .clients import AdditionClient, SubtractionClient
+from .clients import AdditionClient, SubtractionClient, MultiplicationClient, DivisionClient
 from .remote_executors import format_decimal
 
 
 class DecompositionStep(BaseModel):
-    operation: str = Field(pattern="^(add|sub)$")
+    operation: str = Field(pattern="^(add|sub|mul|div)$")
     operand: Decimal
 
 
@@ -37,6 +37,8 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
     planner_llm: ChatOpenAI | None = None
     addition_client: AdditionClient | None = None
     subtraction_client: SubtractionClient | None = None
+    multiplication_client: MultiplicationClient | None = None
+    division_client: DivisionClient | None = None
 
     def __post_init__(self) -> None:
         if self.planner_llm is None:
@@ -49,6 +51,10 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
             self.addition_client = AdditionClient(os.getenv("ADDITION_AGENT_URL", "http://localhost:9999"))
         if self.subtraction_client is None:
             self.subtraction_client = SubtractionClient(os.getenv("SUBTRACTION_AGENT_URL", "http://localhost:10000"))
+        if self.multiplication_client is None:
+            self.multiplication_client = MultiplicationClient(os.getenv("MULTIPLICATION_AGENT_URL", "http://localhost:10001"))
+        if self.division_client is None:
+            self.division_client = DivisionClient(os.getenv("DIVISION_AGENT_URL", "http://localhost:10002"))
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         expression = (context.get_user_input() or "").strip()
@@ -91,8 +97,9 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
             "Plan:",
             f"  start = {format_decimal(plan.initial_value)}",
         ]
+        symbol_map = {"add": "+", "sub": "-", "mul": "*", "div": "/"}
         for idx, step in enumerate(plan.steps, start=1):
-            operator = "+" if step.operation == "add" else "-"
+            operator = symbol_map.get(step.operation, step.operation)
             plan_lines.append(
                 f"  {idx}. {operator} {format_decimal(step.operand)}",
             )
@@ -100,11 +107,18 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
 
         current = plan.initial_value
         for idx, step in enumerate(plan.steps, start=1):
-            operator = "+" if step.operation == "add" else "-"
+            operator = symbol_map.get(step.operation, step.operation)
             if step.operation == "add":
                 result = await self.addition_client.add(current, step.operand)  # type: ignore[arg-type]
-            else:
+            elif step.operation == "sub":
                 result = await self.subtraction_client.subtract(current, step.operand)  # type: ignore[arg-type]
+            elif step.operation == "mul":
+                result = await self.multiplication_client.multiply(current, step.operand)  # type: ignore[arg-type]
+            elif step.operation == "div":
+                result = await self.division_client.divide(current, step.operand)  # type: ignore[arg-type]
+            else:  # pragma: no cover - guard against unexpected operations
+                await send_status(f"Unsupported operation '{step.operation}'", state=TaskState.failed, final=True)
+                return
 
             await send_status(
                 f"Step {idx}: {format_decimal(current)} {operator} {format_decimal(step.operand)} = {format_decimal(result)}"
@@ -123,14 +137,16 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
     async def shutdown(self) -> None:
         await self.addition_client.shutdown()  # type: ignore[union-attr]
         await self.subtraction_client.shutdown()  # type: ignore[union-attr]
+        await self.multiplication_client.shutdown()  # type: ignore[union-attr]
+        await self.division_client.shutdown()  # type: ignore[union-attr]
 
     async def _decompose_with_llm(self, expression: str) -> DecompositionResult:
         prompt = (
             "You are an expert math planner. Break down the following arithmetic expression into"
-            " a sequence of operations that only use addition or subtraction."
+            " a sequence of operations that only use addition, subtraction, multiplication, or division."
             " Output JSON matching this schema: {\n"
             "  \"initial_value\": number,\n"
-            "  \"steps\": [{\"operation\": \"add\" or \"sub\", \"operand\": number}]\n"
+            "  \"steps\": [{\"operation\": \"add\" | \"sub\" | \"mul\" | \"div\", \"operand\": number}]\n"
             "}.\n"
             "Expression: "
             + expression
@@ -163,9 +179,19 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
             operand = tokens[idx + 1]
             if not isinstance(operator, str) or not isinstance(operand, Decimal):
                 return None
+            if operator == "+":
+                op_key = "add"
+            elif operator == "-":
+                op_key = "sub"
+            elif operator == "*":
+                op_key = "mul"
+            elif operator == "/":
+                op_key = "div"
+            else:
+                return None
             steps.append(
                 DecompositionStep(
-                    operation="add" if operator == "+" else "sub",
+                    operation=op_key,
                     operand=operand,
                 )
             )
@@ -201,7 +227,7 @@ class ArithmeticHostAgentExecutor(AgentExecutor):
                 current_sign = 1
                 expect_number = False
             else:
-                if ch not in "+-":
+                if ch not in "+-*/":
                     raise ValueError("Expected operator")
                 tokens.append(ch)
                 expect_number = True

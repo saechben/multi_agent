@@ -21,6 +21,10 @@ from .servers import (
     stop_uvicorn,
 )
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 class Experiment:
     """Manages the lifecycle of the arithmetic agent cluster for experiments."""

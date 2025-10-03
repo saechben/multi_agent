@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
 from datetime import datetime
@@ -13,6 +12,8 @@ from typing import Iterable
 from experiment import Experiment, ExperimentConfig
 
 RESULTS_DIR = Path("results")
+DEFAULT_DATASET = Path("data/as_easy.json")
+DEFAULT_RESULT_PATH = Path("results/as_easy_result.json")
 
 
 def load_dataset(path: Path) -> list[dict[str, str]]:
@@ -91,7 +92,6 @@ class EvaluationPipeline:
         }
 
     def run(self) -> Path:
-        """Execute the evaluation and persist the results."""
         results = asyncio.run(self._evaluate_async())
         self.results_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
@@ -101,9 +101,19 @@ class EvaluationPipeline:
         return output_path
 
 
-def run_evaluation(dataset_path: Path, *, config: ExperimentConfig | None = None, results_dir: Path = RESULTS_DIR) -> Path:
+def run_evaluation(
+    dataset_path: Path,
+    *,
+    config: ExperimentConfig | None = None,
+    results_dir: Path = RESULTS_DIR,
+) -> Path:
     pipeline = EvaluationPipeline(dataset_path, config=config, results_dir=results_dir)
     return pipeline.run()
 
 
+if __name__ =="__main__":
+    dataset_path = Path("./data/asm_easy.json")
+    result_dir = Path("./result/asm_easy.json")
+    run_evaluation(dataset_path=dataset_path,
+                   results_dir = result_dir)
 
